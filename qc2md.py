@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-d",
         "--dialogue",
-        help="Dialogue file to source references from, where appropriate",
+        help="Dialogue file to source references from, where appropriate. Enables --refs if set.",
     )
     parser.add_argument(
         "--ref-format",
@@ -314,7 +314,7 @@ def main():
 
     dialogue_events = (
         load_dialogue_file(Path(args.dialogue))
-        if (args.dialogue and Path(args.dialogue).exists() and args.refs)
+        if (args.dialogue and Path(args.dialogue).exists())
         else None
     )
 
@@ -330,7 +330,7 @@ def main():
         artifact_filename=artifact_filename,
         githash=githash,
         dialogue_events=dialogue_events,
-        include_references=args.refs,
+        include_references=(args.refs or dialogue_events),
         ref_format=args.ref_format,
         pick_refs=args.pick_refs,
     )
