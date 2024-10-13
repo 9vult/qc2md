@@ -16,6 +16,7 @@ from typing import Dict
 from pathlib import Path
 from datetime import timedelta
 from dataclasses import dataclass
+from enum import Enum
 
 # mpvQC output line format. sample:
 # [00:02:18] [Phrasing] unsure of "comprises"
@@ -35,6 +36,14 @@ class QCEntry:
     time: str
     category: str
     text: str
+
+
+class RefFormat(Enum):
+    FULL = "full"
+    TEXT = "text"
+
+    def __str__(self):
+        return self.value
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,8 +75,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ref-format",
-        default="full",
-        choices=("full", "text"),
+        type=RefFormat,
+        default=RefFormat.FULL,
+        choices=tuple(RefFormat),
         help="How to format imported dialogue lines (default: %(default)s)",
     )
     parser.add_argument(
@@ -203,7 +213,7 @@ def write_markdown(
     *,
     dialogue_events: list[ass.Dialogue] = None,
     include_references: bool = False,
-    ref_format: str = "full",
+    ref_format: RefFormat = RefFormat.FULL,
     pick_refs: bool = True,
 ) -> None:
     """Create and write the markdown file
@@ -215,7 +225,7 @@ def write_markdown(
         githash (str, optional): Current git hash. Defaults to None.
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
         include_references (bool, optional): Should references be added?. Defaults to False.
-        ref_format (str, optional): Dialogue file reference formatting. Defaults to "full".
+        ref_format (RefFormat, optional): Dialogue file reference formatting. Defaults to FULL.
         pick_refs (bool, optional): Display a picker interfact if there are multiple matching refs. Defaults to True
     """
     with smart_open(output_filename) as md:
@@ -251,7 +261,7 @@ def write_markdown(
                                 matches = picks
                         for ref in matches:
                             md.write(
-                                f"> {ref.dump() if ref_format == "full" else ref.text}\n"
+                                f"> {ref.dump() if ref_format == RefFormat.FULL else ref.text}\n"
                             )
 
                 # Group != category when --chrono is supplied
