@@ -30,6 +30,7 @@ NON_DIALOGUE_CATEGORIES = ("Typeset", "Encode")
 @dataclass
 class QCEntry:
     """An entry in a mpvQC report"""
+
     time: str
     category: str
     text: str
@@ -42,19 +43,20 @@ def parse_args() -> argparse.Namespace:
         argparse.Namespace: The parsed arguments
     """
     parser = argparse.ArgumentParser(
-        prog="qc2md", description="Convert mpvQC reports to markdown")
+        prog="qc2md", description="Convert mpvQC reports to markdown"
+    )
     parser.add_argument("filename", help="mpvQC report")
     parser.add_argument(
         "-r",
         "--refs",
         action="store_true",
-        help="Add quotation blocks for line references above report entries"
+        help="Add quotation blocks for line references above report entries",
     )
     parser.add_argument(
         "-c",
         "--chrono",
         action="store_true",
-        help="Group most notes together in chronological order"
+        help="Group most notes together in chronological order",
     )
     parser.add_argument(
         "-d",
@@ -65,7 +67,13 @@ def parse_args() -> argparse.Namespace:
         "--ref-format",
         default="full",
         choices=("full", "text"),
-        help="How to format imported dialogue lines (default: %(default)s)"
+        help="How to format imported dialogue lines (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--pick-refs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Display a picker interface if there are multiple matching reference lines (default: %(default)s)",
     )
 
     return parser.parse_args()
@@ -86,7 +94,7 @@ def load_report(filename: str) -> tuple[str, list[str]]:
         artifact = next(
             line.split("/")[-1].strip() for line in lines if line.startswith("path")
         )
-    lines = lines[lines.index("[DATA]\n") + 1:]
+    lines = lines[lines.index("[DATA]\n") + 1 :]
 
     return (artifact, lines)
 
@@ -115,9 +123,7 @@ def parse_report(lines: list[str]) -> list[QCEntry]:
 
 
 def categorize_entries(
-    entries: list[QCEntry],
-    *,
-    group_script_entries: bool = False
+    entries: list[QCEntry], *, group_script_entries: bool = False
 ) -> Dict[str, list[QCEntry]]:
     """Organize report entries into buckets based on their category
 
@@ -132,7 +138,9 @@ def categorize_entries(
 
     for entry in entries:
         if group_script_entries:
-            group = entry.category if entry.category in STANDALONE_CATEGORIES else "Script"
+            group = (
+                entry.category if entry.category in STANDALONE_CATEGORIES else "Script"
+            )
         else:
             group = entry.category
 
@@ -155,14 +163,17 @@ def load_dialogue_file(filename: str) -> list[ass.Dialogue]:
     with open(filename, encoding="utf-8-sig") as file:
         doc = ass.parse(file)
         return [
-            line for line in doc.events
+            line
+            for line in doc.events
             if isinstance(line, ass.line.Dialogue)
             # Sanity check exclude shenanigans and stuff. Should be mostly accurate
             and not "\\pos" in line.text
         ]
 
 
-def get_dialogue_lines_at_time(doc: list[ass.Dialogue], timestamp: str) -> list[ass.Dialogue]:
+def get_dialogue_lines_at_time(
+    doc: list[ass.Dialogue], timestamp: str
+) -> list[ass.Dialogue]:
     """Get the dialogue events present at the given timestamp
 
     Args:
@@ -175,9 +186,7 @@ def get_dialogue_lines_at_time(doc: list[ass.Dialogue], timestamp: str) -> list[
     h, m, s = [int(x) for x in timestamp.split(":")]
     start = timedelta(hours=h, minutes=m, seconds=s)
     end = timedelta(seconds=start.seconds + 1)
-    return [
-        line for line in doc if (line.start < end) and (line.end > start)
-    ]
+    return [line for line in doc if (line.start < end) and (line.end > start)]
 
 
 def write_markdown(
@@ -188,7 +197,8 @@ def write_markdown(
     *,
     dialogue_events: list[ass.Dialogue] = None,
     include_references: bool = False,
-    ref_format: str = "full"
+    ref_format: str = "full",
+    pick_refs: bool = True,
 ) -> None:
     """Create and write the markdown file
 
@@ -200,6 +210,7 @@ def write_markdown(
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
         include_references (bool, optional): Should references be added?. Defaults to False.
         ref_format (str, optional): Dialogue file reference formatting. Defaults to "full".
+        pick_refs (bool, optional): Display a picker interfact if there are multiple matching refs. Defaults to True
     """
     with open(output_filename, mode="w", encoding="utf-8") as md:
         # Write the header if values are supplied
@@ -218,20 +229,36 @@ def write_markdown(
                 if include_references and group not in NON_DIALOGUE_CATEGORIES:
                     if dialogue_events:
                         matches = get_dialogue_lines_at_time(
-                            dialogue_events, entry.time)
-                        if len(matches) > 1:
-                            result = resolve_conflicts(entry, matches)
-                            if result is None: sys.exit(0) # The user canceled the operation
-                            md.write(f"> {result.dump() if ref_format == "full" else result.text}\n")
+                            dialogue_events, entry.time
+                        )
+                        if not pick_refs or len(matches) == 1:
+                            for ref in matches:
+                                md.write(
+                                    f"> {ref.dump() if ref_format == "full" else ref.text}\n"
+                                )
                         else:
-                            md.write(f"> {matches[0].dump() if ref_format == "full" else matches[0].text}\n")
+                            if len(matches) > 1:
+                                result = pick_references(entry, matches)
+                                if result is not None:
+                                    md.write(
+                                        f"> {result.dump() if ref_format == "full" else result.text}\n"
+                                    )
+                                else:
+                                    # The user canceled the operation
+                                    pick_refs = False
+                                    for ref in matches:
+                                        md.write(
+                                            f"> {ref.dump() if ref_format == "full" else ref.text}\n"
+                                        )
+                                    
                     else:
                         md.write("> \n")
 
                 # Group != category when --chrono is supplied
                 if group != entry.category:
                     md.write(
-                        f"- [ ] [`{entry.time}` - **{entry.category}]: {entry.text}\n")
+                        f"- [ ] [`{entry.time}` - **{entry.category}]: {entry.text}\n"
+                    )
                 else:
                     md.write(f"- [ ] [`{entry.time}`]: {entry.text}\n")
             md.write("\n")
@@ -242,17 +269,17 @@ def main():
     report_filename = args.filename
     output_filename = Path(args.filename).with_suffix(".md")
 
-    dialogue_events = load_dialogue_file(Path(args.dialogue)) if (
-        args.dialogue and Path(args.dialogue).exists() and args.refs
-    ) else None
+    dialogue_events = (
+        load_dialogue_file(Path(args.dialogue))
+        if (args.dialogue and Path(args.dialogue).exists() and args.refs)
+        else None
+    )
 
-    repo = git.Repo(path=Path(args.filename).parent,
-                    search_parent_directories=True)
+    repo = git.Repo(path=Path(args.filename).parent, search_parent_directories=True)
     githash = repo.head.object.hexsha
 
     (artifact_filename, lines) = load_report(report_filename)
-    entries = categorize_entries(parse_report(
-        lines), group_script_entries=args.chrono)
+    entries = categorize_entries(parse_report(lines), group_script_entries=args.chrono)
 
     write_markdown(
         output_filename=output_filename,
@@ -261,11 +288,12 @@ def main():
         githash=githash,
         dialogue_events=dialogue_events,
         include_references=args.refs,
-        ref_format=args.ref_format
+        ref_format=args.ref_format,
+        pick_refs=args.pick_refs,
     )
 
 
-def resolve_conflicts(note: str, options: list[ass.Dialogue]):
+def pick_references(note: str, options: list[ass.Dialogue]):
     """Display an interface for selecting the appropriate dialogue line
     if there are multiple matches
 
@@ -280,7 +308,7 @@ def resolve_conflicts(note: str, options: list[ass.Dialogue]):
     from textual.widgets import Static
     from textual.keys import Keys
 
-    class ConflictResolverApp(App):
+    class ReferencePickerApp(App):
         def __init__(self, note: QCEntry, options: list[ass.Dialogue], **kwargs):
             super().__init__(**kwargs)
             self.note = note
@@ -288,9 +316,14 @@ def resolve_conflicts(note: str, options: list[ass.Dialogue]):
             self.selection = 0
 
         def compose(self) -> ComposeResult:
-            yield Static(f"Select the correct reference for this note:\n    [{self.note.category}]: {self.note.text}\n\n")
+            yield Static(
+                f"Select the applicable reference(s):\n    [{self.note.category}]: {self.note.text}\n\n"
+            )
             for i, option in enumerate(self.options):
-                yield Static(f"  {'> ' if i == self.selection else '  '}{option.text}", id=f"option-{i}")
+                yield Static(
+                    f"  {'> ' if i == self.selection else '  '}{option.text}",
+                    id=f"option-{i}",
+                )
 
         def on_mount(self):
             self.update_widgets()
@@ -298,7 +331,10 @@ def resolve_conflicts(note: str, options: list[ass.Dialogue]):
         def update_widgets(self):
             for i, _ in enumerate(self.options):
                 widget = self.query_one(f"#option-{i}", Static)
-                widget.update(f"  {'> ' if i == self.selection else '  '}{self.options[i].text}")
+                widget.update(
+                    f"  {'> ' if i == self.selection else '  '}{
+                              self.options[i].text}"
+                )
 
         async def on_key(self, event):
             if event.key == Keys.Up:
@@ -310,7 +346,7 @@ def resolve_conflicts(note: str, options: list[ass.Dialogue]):
             elif event.key == Keys.Enter:
                 self.exit(self.selection)
 
-    app = ConflictResolverApp(note, options)
+    app = ReferencePickerApp(note, options)
     result = app.run()
     return options[result] if result is not None else None
 
