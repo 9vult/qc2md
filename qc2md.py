@@ -297,8 +297,8 @@ def pick_references(
         list[ass.Dialogue] | None: The selected line(s), or None if the user canceled the operation
     """
     from textual.app import App, ComposeResult
-    from textual.widgets import Static
-    from textual.keys import Keys
+    from textual.widgets import Footer, Static
+    from textual.binding import Binding
 
     class ReferencePickerApp(App):
         def __init__(self, note: QCEntry, options: list[ass.Dialogue], **kwargs):
@@ -307,6 +307,13 @@ def pick_references(
             self.options = options
             self.highlighted = 0
             self.selection = []
+
+        BINDINGS = [
+            Binding("Up", "up", "Move cursor up"),
+            Binding("Down", "down", "Move cursor down"),
+            Binding("space", "select", "Select highlighted line"),
+            Binding("Enter", "accept", "Accept highlighted or selected line(s)"),
+        ]
 
         def compose(self) -> ComposeResult:
             yield Static(
@@ -317,6 +324,7 @@ def pick_references(
                     f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{option.text}",
                     id=f"option-{i}",
                 )
+            yield Footer(show_command_palette=False)
 
         def on_mount(self):
             self.update_widgets()
@@ -328,25 +336,25 @@ def pick_references(
                     f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{self.options[i].text}"
                 )
 
-        async def on_key(self, event):
-            if event.key == Keys.Up:
-                self.highlighted = (self.highlighted - 1) % len(self.options)
-                self.update_widgets()
-            elif event.key == Keys.Down:
-                self.highlighted = (self.highlighted + 1) % len(self.options)
-                self.update_widgets()
-            elif event.key == Keys.Space:
-                (
-                    # Toggle selection of the highlighted item
-                    self.selection.remove(self.highlighted)
-                    if (self.highlighted in self.selection)
-                    else self.selection.append(self.highlighted)
-                )
-                self.update_widgets()
-            elif event.key == Keys.Enter:
-                self.exit(
-                    self.selection if len(self.selection) > 0 else [self.highlighted]
-                )
+        async def action_up(self):
+            self.highlighted = (self.highlighted - 1) % len(self.options)
+            self.update_widgets()
+
+        async def action_down(self):
+            self.highlighted = (self.highlighted + 1) % len(self.options)
+            self.update_widgets()
+
+        async def action_select(self):
+            (
+                # Toggle selection of the highlighted item
+                self.selection.remove(self.highlighted)
+                if (self.highlighted in self.selection)
+                else self.selection.append(self.highlighted)
+            )
+            self.update_widgets()
+
+        async def action_accept(self):
+            self.exit(self.selection if len(self.selection) > 0 else [self.highlighted])
 
     app = ReferencePickerApp(note, options)
     result = app.run()
