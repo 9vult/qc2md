@@ -13,6 +13,7 @@ import argparse
 from typing import Dict
 from pathlib import Path
 from datetime import timedelta
+from dataclasses import dataclass
 
 # mpvQC output line format. sample:
 # [00:02:18] [Phrasing] unsure of "comprises"
@@ -25,11 +26,12 @@ STANDALONE_CATEGORIES = ("Typeset", "Timing", "Encode")
 NON_DIALOGUE_CATEGORIES = ("Typeset", "Encode")
 
 
+@dataclass
 class QCEntry:
-    def __init__(self, time: str, category: str, text: str):
-        self.time = time
-        self.category = category
-        self.text = text
+    """An entry in a mpvQC report"""
+    time: str
+    category: str
+    text: str
 
 
 def parse_args() -> argparse.Namespace:
