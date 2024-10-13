@@ -9,6 +9,7 @@ Authors: 9volt, petzku
 import re
 import ass
 import git
+import sys
 import argparse
 from typing import Dict
 from pathlib import Path
@@ -218,9 +219,12 @@ def write_markdown(
                     if dialogue_events:
                         matches = get_dialogue_lines_at_time(
                             dialogue_events, entry.time)
-                        for reference in matches:
-                            md.write(
-                                f"> {reference.dump() if ref_format == "full" else reference.text}\n")
+                        if len(matches) > 1:
+                            result = resolve_conflicts(entry, matches)
+                            if result is None: sys.exit(0) # The user canceled the operation
+                            md.write(f"> {result.dump() if ref_format == "full" else result.text}\n")
+                        else:
+                            md.write(f"> {matches[0].dump() if ref_format == "full" else matches[0].text}\n")
                     else:
                         md.write("> \n")
 
@@ -259,6 +263,56 @@ def main():
         include_references=args.refs,
         ref_format=args.ref_format
     )
+
+
+def resolve_conflicts(note: str, options: list[ass.Dialogue]):
+    """Display an interface for selecting the appropriate dialogue line
+    if there are multiple matches
+
+    Args:
+        note (str): The note to match for
+        options (list[ass.Dialogue]): List of matching dialogue lines
+
+    Returns:
+        ass.Dialogue|None: The selected line, or None if the user canceled the operation
+    """
+    from textual.app import App, ComposeResult
+    from textual.widgets import Static
+    from textual.keys import Keys
+
+    class ConflictResolverApp(App):
+        def __init__(self, note: QCEntry, options: list[ass.Dialogue], **kwargs):
+            super().__init__(**kwargs)
+            self.note = note
+            self.options = options
+            self.selection = 0
+
+        def compose(self) -> ComposeResult:
+            yield Static(f"Select the correct reference for this note:\n    [{self.note.category}]: {self.note.text}\n\n")
+            for i, option in enumerate(self.options):
+                yield Static(f"  {'> ' if i == self.selection else '  '}{option.text}", id=f"option-{i}")
+
+        def on_mount(self):
+            self.update_widgets()
+
+        def update_widgets(self):
+            for i, _ in enumerate(self.options):
+                widget = self.query_one(f"#option-{i}", Static)
+                widget.update(f"  {'> ' if i == self.selection else '  '}{self.options[i].text}")
+
+        async def on_key(self, event):
+            if event.key == Keys.Up:
+                self.selection = (self.selection - 1) % len(self.options)
+                self.update_widgets()
+            elif event.key == Keys.Down:
+                self.selection = (self.selection + 1) % len(self.options)
+                self.update_widgets()
+            elif event.key == Keys.Enter:
+                self.exit(self.selection)
+
+    app = ConflictResolverApp(note, options)
+    result = app.run()
+    return options[result] if result is not None else None
 
 
 if __name__ == "__main__":
