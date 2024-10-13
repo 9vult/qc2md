@@ -14,6 +14,7 @@ from typing import Dict
 from pathlib import Path
 from datetime import timedelta
 from dataclasses import dataclass
+from enum import Enum
 
 # mpvQC output line format. sample:
 # [00:02:18] [Phrasing] unsure of "comprises"
@@ -32,6 +33,14 @@ class QCEntry:
     time: str
     category: str
     text: str
+
+
+class RefFormat(Enum):
+    FULL = "full"
+    TEXT = "text"
+
+    def __str__(self):
+        return self.value
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,9 +71,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ref-format",
-        default="full",
-        choices=("full", "text"),
-        help="How to format imported dialogue lines (default: %(default)s)"
+        type=RefFormat,
+        default=RefFormat.FULL,
+        choices=tuple(RefFormat),
+        help="How to format imported dialogue lines (default: %(default)s)",
     )
 
     return parser.parse_args()
@@ -187,7 +197,7 @@ def write_markdown(
     *,
     dialogue_events: list[ass.Dialogue] = None,
     include_references: bool = False,
-    ref_format: str = "full"
+    ref_format: RefFormat = RefFormat.FULL,
 ) -> None:
     """Create and write the markdown file
 
@@ -198,7 +208,7 @@ def write_markdown(
         githash (str, optional): Current git hash. Defaults to None.
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
         include_references (bool, optional): Should references be added?. Defaults to False.
-        ref_format (str, optional): Dialogue file reference formatting. Defaults to "full".
+        ref_format (RefFormat, optional): Dialogue file reference formatting. Defaults to FULL.
     """
     with open(output_filename, mode="w", encoding="utf-8") as md:
         # Write the header if values are supplied
@@ -220,7 +230,8 @@ def write_markdown(
                             dialogue_events, entry.time)
                         for reference in matches:
                             md.write(
-                                f"> {reference.dump() if ref_format == "full" else reference.text}\n")
+                                f"> {reference.dump() if ref_format == RefFormat.FULL else reference.text}\n"
+                            )
                     else:
                         md.write("> \n")
 
