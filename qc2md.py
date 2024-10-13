@@ -227,32 +227,22 @@ def write_markdown(
             md.write(f"## {group}\n")
             for entry in notes:
                 if include_references and group not in NON_DIALOGUE_CATEGORIES:
-                    if dialogue_events:
+                    if not dialogue_events:
+                        md.write("> \n")
+                    else:  # Get references from dialogue file
                         matches = get_dialogue_lines_at_time(
                             dialogue_events, entry.time
                         )
-                        if not pick_refs or len(matches) == 1:
-                            for ref in matches:
-                                md.write(
-                                    f"> {ref.dump() if ref_format == "full" else ref.text}\n"
-                                )
-                        else:
-                            if len(matches) > 1:
-                                result = pick_references(entry, matches)
-                                if result is not None:
-                                    md.write(
-                                        f"> {result.dump() if ref_format == "full" else result.text}\n"
-                                    )
-                                else:
-                                    # The user canceled the operation
-                                    pick_refs = False
-                                    for ref in matches:
-                                        md.write(
-                                            f"> {ref.dump() if ref_format == "full" else ref.text}\n"
-                                        )
-                                    
-                    else:
-                        md.write("> \n")
+                        if pick_refs and len(matches) != 1:
+                            picks = pick_references(entry, matches)
+                            if picks is None:
+                                pick_refs = False
+                            else:
+                                matches = picks
+                        for ref in matches:
+                            md.write(
+                                f"> {ref.dump() if ref_format == "full" else ref.text}\n"
+                            )
 
                 # Group != category when --chrono is supplied
                 if group != entry.category:
@@ -293,8 +283,10 @@ def main():
     )
 
 
-def pick_references(note: str, options: list[ass.Dialogue]):
-    """Display an interface for selecting the appropriate dialogue line
+def pick_references(
+    note: str, options: list[ass.Dialogue]
+) -> list[ass.Dialogue] | None:
+    """Display an interface for selecting the appropriate dialogue line(s)
     if there are multiple matches
 
     Args:
@@ -302,7 +294,7 @@ def pick_references(note: str, options: list[ass.Dialogue]):
         options (list[ass.Dialogue]): List of matching dialogue lines
 
     Returns:
-        ass.Dialogue|None: The selected line, or None if the user canceled the operation
+        list[ass.Dialogue] | None: The selected line(s), or None if the user canceled the operation
     """
     from textual.app import App, ComposeResult
     from textual.widgets import Static
@@ -313,7 +305,8 @@ def pick_references(note: str, options: list[ass.Dialogue]):
             super().__init__(**kwargs)
             self.note = note
             self.options = options
-            self.selection = 0
+            self.highlighted = 0
+            self.selection = []
 
         def compose(self) -> ComposeResult:
             yield Static(
@@ -321,7 +314,7 @@ def pick_references(note: str, options: list[ass.Dialogue]):
             )
             for i, option in enumerate(self.options):
                 yield Static(
-                    f"  {'> ' if i == self.selection else '  '}{option.text}",
+                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{option.text}",
                     id=f"option-{i}",
                 )
 
@@ -332,23 +325,32 @@ def pick_references(note: str, options: list[ass.Dialogue]):
             for i, _ in enumerate(self.options):
                 widget = self.query_one(f"#option-{i}", Static)
                 widget.update(
-                    f"  {'> ' if i == self.selection else '  '}{
-                              self.options[i].text}"
+                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{self.options[i].text}"
                 )
 
         async def on_key(self, event):
             if event.key == Keys.Up:
-                self.selection = (self.selection - 1) % len(self.options)
+                self.highlighted = (self.highlighted - 1) % len(self.options)
                 self.update_widgets()
             elif event.key == Keys.Down:
-                self.selection = (self.selection + 1) % len(self.options)
+                self.highlighted = (self.highlighted + 1) % len(self.options)
+                self.update_widgets()
+            elif event.key == Keys.Space:
+                (
+                    # Toggle selection of the highlighted item
+                    self.selection.remove(self.highlighted)
+                    if (self.highlighted in self.selection)
+                    else self.selection.append(self.highlighted)
+                )
                 self.update_widgets()
             elif event.key == Keys.Enter:
-                self.exit(self.selection)
+                self.exit(
+                    self.selection if len(self.selection) > 0 else [self.highlighted]
+                )
 
     app = ReferencePickerApp(note, options)
     result = app.run()
-    return options[result] if result is not None else None
+    return [options[i] for i in result] if result is not None else None
 
 
 if __name__ == "__main__":
