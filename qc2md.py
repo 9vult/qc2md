@@ -384,7 +384,7 @@ def pick_references(
             )
             for i, option in enumerate(self.options):
                 yield Static(
-                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{option.text}",
+                    f"  {'*' if i in self.selection else ' '} {'>' if i == self.highlighted else ' '} {option.text}",
                     id=f"option-{i}",
                 )
             yield Footer(show_command_palette=False)
@@ -393,10 +393,10 @@ def pick_references(
             self.update_widgets()
 
         def update_widgets(self):
-            for i, _ in enumerate(self.options):
+            for i, option in enumerate(self.options):
                 widget = self.query_one(f"#option-{i}", Static)
                 widget.update(
-                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{self.options[i].text}"
+                    f"  {'*' if i in self.selection else ' '} {'>' if i == self.highlighted else ' '} {option.text}"
                 )
 
         async def action_up(self):
@@ -408,8 +408,8 @@ def pick_references(
             self.update_widgets()
 
         async def action_select(self):
+            # Toggle selection of the highlighted item
             (
-                # Toggle selection of the highlighted item
                 self.selection.remove(self.highlighted)
                 if (self.highlighted in self.selection)
                 else self.selection.append(self.highlighted)
