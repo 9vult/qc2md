@@ -267,7 +267,7 @@ def write_markdown(
                 # Group != category when --chrono is supplied
                 if group != entry.category:
                     md.write(
-                        f"- [ ] [`{entry.time}` - **{entry.category}]: {entry.text}\n"
+                        f"- [ ] [`{entry.time}` - **{entry.category}**]: {entry.text}\n"
                     )
                 else:
                     md.write(f"- [ ] [`{entry.time}`]: {entry.text}\n")
