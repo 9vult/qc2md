@@ -362,10 +362,10 @@ def pick_references(
             self.selection = []
 
         BINDINGS = [
-            Binding("Up", "up", "Move cursor up"),
-            Binding("Down", "down", "Move cursor down"),
+            Binding("up", "up", "Move cursor up"),
+            Binding("down", "down", "Move cursor down"),
             Binding("space", "select", "Select highlighted line"),
-            Binding("Enter", "accept", "Accept highlighted or selected line(s)"),
+            Binding("enter", "accept", "Accept highlighted or selected line(s)"),
         ]
 
         def compose(self) -> ComposeResult:
