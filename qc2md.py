@@ -81,6 +81,20 @@ def parse_args() -> argparse.Namespace:
         help="How to references sourced from the dialogue file (default: %(default)s)",
     )
     parser.add_argument(
+        "-F",
+        action="store_const",
+        const=RefFormat.FULL,
+        dest="ref_format",
+        help="Equivalent to --ref-format full",
+    )
+    parser.add_argument(
+        "-T",
+        action="store_const",
+        const=RefFormat.TEXT,
+        dest="ref_format",
+        help="Equivalent to --ref-format text",
+    )
+    parser.add_argument(
         "--pick-refs",
         action=argparse.BooleanOptionalAction,
         default=True,
