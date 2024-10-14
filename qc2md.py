@@ -104,7 +104,7 @@ def load_report(filename: str) -> tuple[str | None, list[str]]:
         tuple[str | None, list[str]]: Artifact filename if present, and list of raw lines
     """
     lines: list[str] = []
-    with open(filename, mode="r", encoding="utf-8") as file:
+    with open(filename, encoding="utf-8") as file:
         lines = file.readlines()
         # sample line in [FILE] section:
         # path      : /path/to/qc2md/test/blank.mkv
@@ -286,7 +286,7 @@ def write_markdown(
 @contextlib.contextmanager
 def smart_open(filename: str | None):
     """Custom open method for supporting stdout as a write destination
-    
+
     Based on https://stackoverflow.com/a/17603000/4611644, CC BY-SA 4.0
 
     Args:
@@ -335,10 +335,10 @@ def main():
     entries = categorize_entries(parse_report(lines), group_script_entries=args.chrono)
 
     write_markdown(
-        output_filename=output_filename,
-        entries=entries,
-        artifact_filename=artifact_filename,
-        githash=githash,
+        output_filename,
+        entries,
+        artifact_filename,
+        githash,
         dialogue_events=dialogue_events,
         include_references=args.refs or (dialogue_events is not None),
         ref_format=args.ref_format,
