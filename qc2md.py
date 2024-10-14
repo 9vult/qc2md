@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_report(filename: str) -> tuple[str, list[str]]:
+def load_report(filename: str) -> tuple[str | None, list[str]]:
     """Load the mpvQC report file
 
     Args:
@@ -149,7 +149,7 @@ def categorize_entries(
 
     Args:
         entries (list[QCEntry]): Uncategorized list of report entries
-        group_script_entries (bool): Groups most categories under "Script". Defaults to False
+        group_script_entries (bool, optional): Groups most categories under "Script". Defaults to False
 
     Returns:
         dict[str, list[QCEntry]]: Map between categories and entries
@@ -215,9 +215,9 @@ def write_markdown(
     output_filename: str | None,
     entries: dict[str, list[QCEntry]],
     artifact_filename: str | None = None,
-    githash: str = None,
+    githash: str | None = None,
     *,
-    dialogue_events: list[ass.Dialogue] = None,
+    dialogue_events: list[ass.Dialogue] | None = None,
     include_references: bool = False,
     ref_format: RefFormat = RefFormat.FULL,
     pick_refs: bool = True,
@@ -232,7 +232,7 @@ def write_markdown(
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
         include_references (bool, optional): Should references be added?. Defaults to False.
         ref_format (RefFormat, optional): Dialogue file reference formatting. Defaults to FULL.
-        pick_refs (bool, optional): Display a picker interfact if there are multiple matching refs. Defaults to True
+        pick_refs (bool, optional): Display a picker interface if there are multiple matching refs. Defaults to True
     """
     with smart_open(output_filename) as md:
         # Write the header if values are supplied
@@ -340,20 +340,20 @@ def main():
         artifact_filename=artifact_filename,
         githash=githash,
         dialogue_events=dialogue_events,
-        include_references=(args.refs or dialogue_events),
+        include_references=args.refs or (dialogue_events is not None),
         ref_format=args.ref_format,
         pick_refs=args.pick_refs,
     )
 
 
 def pick_references(
-    note: str, options: list[ass.Dialogue]
+    note: QCEntry, options: list[ass.Dialogue]
 ) -> list[ass.Dialogue] | None:
     """Display an interface for selecting the appropriate dialogue line(s)
     if there are multiple matches
 
     Args:
-        note (str): The note to match for
+        note (QCEntry): The note to match for
         options (list[ass.Dialogue]): List of matching dialogue lines
 
     Returns:
@@ -369,7 +369,7 @@ def pick_references(
             self.note = note
             self.options = options
             self.highlighted = 0
-            self.selection = []
+            self.selection: list[int] = []
 
         BINDINGS = [
             Binding("up", "up", "Move cursor up"),
