@@ -74,6 +74,7 @@ def parse_args() -> argparse.Namespace:
         help="Dialogue file to source references from, where appropriate. Enables --refs if set.",
     )
     parser.add_argument(
+        "-f",
         "--ref-format",
         type=RefFormat,
         default=RefFormat.FULL,
