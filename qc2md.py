@@ -297,14 +297,12 @@ def smart_open(filename: str | None):
     """
     if filename and filename != "-":
         fh = open(filename, mode="w", encoding="utf-8")
-    else:
-        fh = sys.stdout
-
-    try:
-        yield fh
-    finally:
-        if fh is not sys.stdout:
+        try:
+            yield fh
+        finally:
             fh.close()
+    else:
+        yield sys.stdout
 
 
 def main():
