@@ -257,11 +257,7 @@ def write_markdown(
                             dialogue_events, entry.time
                         )
                         # If outputting to stdout, we don't want to bring up interface
-                        if (
-                            pick_refs
-                            and len(matches) > 1
-                            and output_filename is not None
-                        ):
+                        if pick_refs and len(matches) > 1 and md is not sys.stdout:
                             picks = pick_references(entry, matches)
                             if picks is None:
                                 # User interrupted picker (ctrl-C). Assume they want no more interaction
