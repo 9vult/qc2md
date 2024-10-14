@@ -12,7 +12,6 @@ import git
 import sys
 import argparse
 import contextlib
-from typing import Dict
 from pathlib import Path
 from datetime import timedelta
 from dataclasses import dataclass
@@ -140,7 +139,7 @@ def parse_report(lines: list[str]) -> list[QCEntry]:
 
 def categorize_entries(
     entries: list[QCEntry], *, group_script_entries: bool = False
-) -> Dict[str, list[QCEntry]]:
+) -> dict[str, list[QCEntry]]:
     """Organize report entries into buckets based on their category
 
     Args:
@@ -148,9 +147,9 @@ def categorize_entries(
         group_script_entries (bool): Groups most categories under "Script". Defaults to False
 
     Returns:
-        Dict[str, list[QCEntry]]: Map between categories and entries
+        dict[str, list[QCEntry]]: Map between categories and entries
     """
-    data: Dict[str, list[QCEntry]] = {}
+    data: dict[str, list[QCEntry]] = {}
 
     for entry in entries:
         if group_script_entries:
@@ -207,7 +206,7 @@ def get_dialogue_lines_at_time(
 
 def write_markdown(
     output_filename: str | None,
-    entries: Dict[str, list[QCEntry]],
+    entries: dict[str, list[QCEntry]],
     artifact_filename: str = None,
     githash: str = None,
     *,
@@ -220,7 +219,7 @@ def write_markdown(
 
     Args:
         output_filename (str | None): Output filename for the markdown file, or None for stdout
-        entries (Dict[str, list[QCEntry]]): Map between categories and entries
+        entries (dict[str, list[QCEntry]]): Map between categories and entries
         artifact_filename (str, optional): Artifact filename. Defaults to None.
         githash (str, optional): Current git hash. Defaults to None.
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
