@@ -12,7 +12,6 @@ import git
 import sys
 import argparse
 import contextlib
-from typing import Dict
 from pathlib import Path
 from datetime import timedelta
 from dataclasses import dataclass
@@ -96,21 +95,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_report(filename: str) -> tuple[str, list[str]]:
+def load_report(filename: str) -> tuple[str | None, list[str]]:
     """Load the mpvQC report file
 
     Args:
         filename (str): mpvQC report filename
 
     Returns:
-        tuple[str, list[str]]: Artifact filename and list of raw lines
+        tuple[str | None, list[str]]: Artifact filename if present, and list of raw lines
     """
     lines: list[str] = []
-    with open(filename, mode="r", encoding="utf-8") as file:
+    with open(filename, encoding="utf-8") as file:
         lines = file.readlines()
+        # sample line in [FILE] section:
+        # path      : /path/to/qc2md/test/blank.mkv
         artifact = next(
-            line.split("/")[-1].strip() for line in lines if line.startswith("path")
+            (line.split("/")[-1].strip() for line in lines if line.startswith("path")),
+            None,
         )
+    # Somewhat hacky, but skips to the [DATA] section.
+    # After this point, all lines will be notes (except final line, containing line count)
     lines = lines[lines.index("[DATA]\n") + 1 :]
 
     return (artifact, lines)
@@ -141,17 +145,17 @@ def parse_report(lines: list[str]) -> list[QCEntry]:
 
 def categorize_entries(
     entries: list[QCEntry], *, group_script_entries: bool = False
-) -> Dict[str, list[QCEntry]]:
+) -> dict[str, list[QCEntry]]:
     """Organize report entries into buckets based on their category
 
     Args:
         entries (list[QCEntry]): Uncategorized list of report entries
-        group_script_entries (bool): Groups most categories under "Script". Defaults to False
+        group_script_entries (bool, optional): Groups most categories under "Script". Defaults to False
 
     Returns:
-        Dict[str, list[QCEntry]]: Map between categories and entries
+        dict[str, list[QCEntry]]: Map between categories and entries
     """
-    data: Dict[str, list[QCEntry]] = {}
+    data: dict[str, list[QCEntry]] = {}
 
     for entry in entries:
         if group_script_entries:
@@ -203,16 +207,18 @@ def get_dialogue_lines_at_time(
     h, m, s = [int(x) for x in timestamp.split(":")]
     start = timedelta(hours=h, minutes=m, seconds=s)
     end = timedelta(seconds=start.seconds + 1)
+    # mpvQC only has 1-second resolution => choose any lines that intersect with that second.
+    # May result in false positives, but this is better than the alternative.
     return [line for line in doc if (line.start < end) and (line.end > start)]
 
 
 def write_markdown(
     output_filename: str | None,
-    entries: Dict[str, list[QCEntry]],
-    artifact_filename: str = None,
-    githash: str = None,
+    entries: dict[str, list[QCEntry]],
+    artifact_filename: str | None = None,
+    githash: str | None = None,
     *,
-    dialogue_events: list[ass.Dialogue] = None,
+    dialogue_events: list[ass.Dialogue] | None = None,
     include_references: bool = False,
     ref_format: RefFormat = RefFormat.FULL,
     pick_refs: bool = True,
@@ -221,13 +227,13 @@ def write_markdown(
 
     Args:
         output_filename (str | None): Output filename for the markdown file, or None for stdout
-        entries (Dict[str, list[QCEntry]]): Map between categories and entries
+        entries (dict[str, list[QCEntry]]): Map between categories and entries
         artifact_filename (str, optional): Artifact filename. Defaults to None.
         githash (str, optional): Current git hash. Defaults to None.
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
         include_references (bool, optional): Should references be added?. Defaults to False.
         ref_format (RefFormat, optional): Dialogue file reference formatting. Defaults to FULL.
-        pick_refs (bool, optional): Display a picker interfact if there are multiple matching refs. Defaults to True
+        pick_refs (bool, optional): Display a picker interface if there are multiple matching refs. Defaults to True
     """
     with smart_open(output_filename) as md:
         # Write the header if values are supplied
@@ -238,6 +244,7 @@ def write_markdown(
         if artifact_filename or githash:
             md.write("\n")
 
+        # Sort sections alphabetically by section header
         ordered_map = sorted(entries.items(), key=lambda item: item[0])
 
         for group, notes in ordered_map:
@@ -250,13 +257,11 @@ def write_markdown(
                         matches = get_dialogue_lines_at_time(
                             dialogue_events, entry.time
                         )
-                        if (
-                            pick_refs
-                            and len(matches) != 1
-                            and output_filename is not None
-                        ):
+                        # If outputting to stdout, we don't want to bring up interface
+                        if pick_refs and len(matches) > 1 and md is not sys.stdout:
                             picks = pick_references(entry, matches)
                             if picks is None:
+                                # User interrupted picker (ctrl-C). Assume they want no more interaction
                                 pick_refs = False
                             else:
                                 matches = picks
@@ -268,7 +273,7 @@ def write_markdown(
                 # Group != category when --chrono is supplied
                 if group != entry.category:
                     md.write(
-                        f"- [ ] [`{entry.time}` - **{entry.category}]: {entry.text}\n"
+                        f"- [ ] [`{entry.time}` - **{entry.category}**]: {entry.text}\n"
                     )
                 else:
                     md.write(f"- [ ] [`{entry.time}`]: {entry.text}\n")
@@ -289,14 +294,12 @@ def smart_open(filename: str | None):
     """
     if filename and filename != "-":
         fh = open(filename, mode="w", encoding="utf-8")
-    else:
-        fh = sys.stdout
-
-    try:
-        yield fh
-    finally:
-        if fh is not sys.stdout:
+        try:
+            yield fh
+        finally:
             fh.close()
+    else:
+        yield sys.stdout
 
 
 def main():
@@ -319,32 +322,33 @@ def main():
         else None
     )
 
-    repo = git.Repo(path=Path(args.filename).parent, search_parent_directories=True)
+    # Use git repo containing QC report rather than current working directory (these may be different)
+    repo = git.Repo(path=Path(report_filename).parent, search_parent_directories=True)
     githash = repo.head.object.hexsha
 
     (artifact_filename, lines) = load_report(report_filename)
     entries = categorize_entries(parse_report(lines), group_script_entries=args.chrono)
 
     write_markdown(
-        output_filename=output_filename,
-        entries=entries,
-        artifact_filename=artifact_filename,
-        githash=githash,
+        output_filename,
+        entries,
+        artifact_filename,
+        githash,
         dialogue_events=dialogue_events,
-        include_references=(args.refs or dialogue_events),
+        include_references=args.refs or (dialogue_events is not None),
         ref_format=args.ref_format,
         pick_refs=args.pick_refs,
     )
 
 
 def pick_references(
-    note: str, options: list[ass.Dialogue]
+    note: QCEntry, options: list[ass.Dialogue]
 ) -> list[ass.Dialogue] | None:
     """Display an interface for selecting the appropriate dialogue line(s)
     if there are multiple matches
 
     Args:
-        note (str): The note to match for
+        note (QCEntry): The note to match for
         options (list[ass.Dialogue]): List of matching dialogue lines
 
     Returns:
@@ -360,13 +364,13 @@ def pick_references(
             self.note = note
             self.options = options
             self.highlighted = 0
-            self.selection = []
+            self.selection: list[int] = []
 
         BINDINGS = [
-            Binding("Up", "up", "Move cursor up"),
-            Binding("Down", "down", "Move cursor down"),
+            Binding("up", "up", "Move cursor up"),
+            Binding("down", "down", "Move cursor down"),
             Binding("space", "select", "Select highlighted line"),
-            Binding("Enter", "accept", "Accept highlighted or selected line(s)"),
+            Binding("enter", "accept", "Accept highlighted or selected line(s)"),
         ]
 
         def compose(self) -> ComposeResult:
@@ -375,7 +379,7 @@ def pick_references(
             )
             for i, option in enumerate(self.options):
                 yield Static(
-                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{option.text}",
+                    f"  {'*' if i in self.selection else ' '} {'>' if i == self.highlighted else ' '} {option.text}",
                     id=f"option-{i}",
                 )
             yield Footer(show_command_palette=False)
@@ -384,10 +388,10 @@ def pick_references(
             self.update_widgets()
 
         def update_widgets(self):
-            for i, _ in enumerate(self.options):
+            for i, option in enumerate(self.options):
                 widget = self.query_one(f"#option-{i}", Static)
                 widget.update(
-                    f"  {'* ' if i in self.selection else '  '}{'> ' if i == self.highlighted else '  '}{self.options[i].text}"
+                    f"  {'*' if i in self.selection else ' '} {'>' if i == self.highlighted else ' '} {option.text}"
                 )
 
         async def action_up(self):
@@ -399,8 +403,8 @@ def pick_references(
             self.update_widgets()
 
         async def action_select(self):
+            # Toggle selection of the highlighted item
             (
-                # Toggle selection of the highlighted item
                 self.selection.remove(self.highlighted)
                 if (self.highlighted in self.selection)
                 else self.selection.append(self.highlighted)
