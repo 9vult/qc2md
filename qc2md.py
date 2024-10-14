@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-d",
         "--dialogue",
-        help="Dialogue file to source references from, where appropriate. Enables --refs if set.",
+        help="ASS subtitle file file to source references from, where appropriate. Implies --refs.",
     )
     parser.add_argument(
         "-f",
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         type=RefFormat,
         default=RefFormat.FULL,
         choices=tuple(RefFormat),
-        help="How to format imported dialogue lines (default: %(default)s)",
+        help="How to references sourced from the dialogue file (default: %(default)s)",
     )
     parser.add_argument(
         "--pick-refs",
@@ -278,7 +278,7 @@ def write_markdown(
 @contextlib.contextmanager
 def smart_open(filename: str | None):
     """Custom open method for supporting stdout as a write destination
-    
+
     Based on https://stackoverflow.com/a/17603000/4611644, CC BY-SA 4.0
 
     Args:
