@@ -106,10 +106,14 @@ def load_report(filename: str) -> tuple[str, list[str]]:
     lines: list[str] = []
     with open(filename, mode="r", encoding="utf-8") as file:
         lines = file.readlines()
+        # sample line in [FILE] section:
+        # path      : /path/to/qc2md/test/blank.mkv
         artifact = next(
             (line.split("/")[-1].strip() for line in lines if line.startswith("path")),
             None,
         )
+    # Somewhat hacky, but skips to the [DATA] section.
+    # After this point, all lines will be notes (except final line, containing line count)
     lines = lines[lines.index("[DATA]\n") + 1 :]
 
     return (artifact, lines)
@@ -202,6 +206,8 @@ def get_dialogue_lines_at_time(
     h, m, s = [int(x) for x in timestamp.split(":")]
     start = timedelta(hours=h, minutes=m, seconds=s)
     end = timedelta(seconds=start.seconds + 1)
+    # mpvQC only has 1-second resolution => choose any lines that intersect with that second.
+    # May result in false positives, but this is better than the alternative.
     return [line for line in doc if (line.start < end) and (line.end > start)]
 
 
@@ -237,6 +243,7 @@ def write_markdown(
         if artifact_filename or githash:
             md.write("\n")
 
+        # Sort sections alphabetically by section header
         ordered_map = sorted(entries.items(), key=lambda item: item[0])
 
         for group, notes in ordered_map:
@@ -249,6 +256,7 @@ def write_markdown(
                         matches = get_dialogue_lines_at_time(
                             dialogue_events, entry.time
                         )
+                        # If outputting to stdout, we don't want to bring up interface
                         if (
                             pick_refs
                             and len(matches) > 1
@@ -256,6 +264,7 @@ def write_markdown(
                         ):
                             picks = pick_references(entry, matches)
                             if picks is None:
+                                # User interrupted picker (ctrl-C). Assume they want no more interaction
                                 pick_refs = False
                             else:
                                 matches = picks
@@ -318,7 +327,8 @@ def main():
         else None
     )
 
-    repo = git.Repo(path=Path(args.filename).parent, search_parent_directories=True)
+    # Use git repo containing QC report rather than current working directory (these may be different)
+    repo = git.Repo(path=Path(report_filename).parent, search_parent_directories=True)
     githash = repo.head.object.hexsha
 
     (artifact_filename, lines) = load_report(report_filename)
