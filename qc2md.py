@@ -251,7 +251,7 @@ def write_markdown(
                         )
                         if (
                             pick_refs
-                            and len(matches) != 1
+                            and len(matches) > 1
                             and output_filename is not None
                         ):
                             picks = pick_references(entry, matches)
