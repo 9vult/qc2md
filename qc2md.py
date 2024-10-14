@@ -101,13 +101,14 @@ def load_report(filename: str) -> tuple[str, list[str]]:
         filename (str): mpvQC report filename
 
     Returns:
-        tuple[str, list[str]]: Artifact filename and list of raw lines
+        tuple[str | None, list[str]]: Artifact filename if present, and list of raw lines
     """
     lines: list[str] = []
     with open(filename, mode="r", encoding="utf-8") as file:
         lines = file.readlines()
         artifact = next(
-            line.split("/")[-1].strip() for line in lines if line.startswith("path")
+            (line.split("/")[-1].strip() for line in lines if line.startswith("path")),
+            None,
         )
     lines = lines[lines.index("[DATA]\n") + 1 :]
 
@@ -207,7 +208,7 @@ def get_dialogue_lines_at_time(
 def write_markdown(
     output_filename: str | None,
     entries: dict[str, list[QCEntry]],
-    artifact_filename: str = None,
+    artifact_filename: str | None = None,
     githash: str = None,
     *,
     dialogue_events: list[ass.Dialogue] = None,
