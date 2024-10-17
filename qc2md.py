@@ -22,10 +22,10 @@ from enum import Enum
 LINE_PATTERN = r"\[(.+?)\] \[(.+?)\] (.+)"
 
 # When using --chrono, keep these categories separate
-STANDALONE_CATEGORIES = ("Typeset", "Timing", "Encode")
+DEFAULT_STANDALONE_CATEGORIES = ("Typeset", "Timing", "Encode")
 
 # When using --refs, do not add a reference line for these categories
-NON_DIALOGUE_CATEGORIES = ("Typeset", "Encode")
+DEFAULT_NON_DIALOGUE_CATEGORIES = ("Typeset", "Encode")
 
 
 @dataclass
@@ -101,6 +101,18 @@ def parse_args() -> argparse.Namespace:
         help="Display a picker interface if there are multiple matching reference lines (default: %(default)s)",
     )
     parser.add_argument(
+        "--nondialogue-categories",
+        nargs="*",  # 0 or more
+        default="Typeset Encode",
+        help="Categories to skip adding references to when --refs is enabled. (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--standalone-categories",
+        nargs="*",  # 0 or more
+        default="Typeset Timing Encode",
+        help='Categories that will not be merged into "Script" when --chrono is enabled. (default: %(default)s)',
+    )
+    parser.add_argument(
         "-o",
         "--output",
         help="Path to output generated Markdown to. Defaults to the input filename with a .md extension. Use '-' for stdout. Using stdout will disable the reference picker.",
@@ -158,12 +170,16 @@ def parse_report(lines: list[str]) -> list[QCEntry]:
 
 
 def categorize_entries(
-    entries: list[QCEntry], *, group_script_entries: bool = False
+    entries: list[QCEntry],
+    standalone_categories: list[str],
+    *,
+    group_script_entries: bool = False,
 ) -> dict[str, list[QCEntry]]:
     """Organize report entries into buckets based on their category
 
     Args:
         entries (list[QCEntry]): Uncategorized list of report entries
+        standalone_categories (list[str]): Categories that will not be merged into "Script" when --chrono is enabled
         group_script_entries (bool, optional): Groups most categories under "Script". Defaults to False
 
     Returns:
@@ -174,7 +190,7 @@ def categorize_entries(
     for entry in entries:
         if group_script_entries:
             group = (
-                entry.category if entry.category in STANDALONE_CATEGORIES else "Script"
+                entry.category if entry.category in standalone_categories else "Script"
             )
         else:
             group = entry.category
@@ -229,6 +245,7 @@ def get_dialogue_lines_at_time(
 def write_markdown(
     output_filename: str | None,
     entries: dict[str, list[QCEntry]],
+    nondialogue_categories: list[str],
     artifact_filename: str | None = None,
     githash: str | None = None,
     *,
@@ -242,6 +259,7 @@ def write_markdown(
     Args:
         output_filename (str | None): Output filename for the markdown file, or None for stdout
         entries (dict[str, list[QCEntry]]): Map between categories and entries
+        nondialogue_categories (list[str]): Categories to skip adding references to when --refs is enabled
         artifact_filename (str, optional): Artifact filename. Defaults to None.
         githash (str, optional): Current git hash. Defaults to None.
         dialogue_events (list[ass.Dialogue], optional): Dialogue events. Defaults to None.
@@ -264,7 +282,7 @@ def write_markdown(
         for group, notes in ordered_map:
             md.write(f"## {group}\n")
             for entry in notes:
-                if include_references and group not in NON_DIALOGUE_CATEGORIES:
+                if include_references and group not in nondialogue_categories:
                     if not dialogue_events:
                         md.write("> \n")
                     else:  # Get references from dialogue file
@@ -330,6 +348,17 @@ def main():
         )
     )
 
+    standalone_categories = (
+        args.standalone_categories
+        if args.standalone_categories is not None
+        else DEFAULT_STANDALONE_CATEGORIES
+    )
+    nondialogue_categories = (
+        args.nondialogue_categories
+        if args.nondialogue_categories is not None
+        else DEFAULT_NON_DIALOGUE_CATEGORIES
+    )
+
     dialogue_events = (
         load_dialogue_file(Path(args.dialogue))
         if (args.dialogue and Path(args.dialogue).exists())
@@ -341,11 +370,14 @@ def main():
     githash = repo.head.object.hexsha
 
     (artifact_filename, lines) = load_report(report_filename)
-    entries = categorize_entries(parse_report(lines), group_script_entries=args.chrono)
+    entries = categorize_entries(
+        parse_report(lines), standalone_categories, group_script_entries=args.chrono
+    )
 
     write_markdown(
         output_filename,
         entries,
+        nondialogue_categories,
         artifact_filename,
         githash,
         dialogue_events=dialogue_events,
