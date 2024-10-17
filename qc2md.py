@@ -67,10 +67,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Group most notes together in chronological order",
     )
-    parser.add_argument(
+    dialogue = parser.add_mutually_exclusive_group()
+    dialogue.add_argument(
         "-d",
         "--dialogue",
         help="ASS subtitle file file to source references from, where appropriate. Implies --refs.",
+    )
+    dialogue.add_argument(
+        "-D",
+        "--auto-dialogue",
+        action="store_true",
+        help="Automatically try to detect dialogue file in same directory as report file. Implies --refs.",
     )
     parser.add_argument(
         "-f",
@@ -330,9 +337,16 @@ def main():
         )
     )
 
+    if args.auto_dialogue:
+        dialogue_path = next(
+            Path(report_filename).parent.glob("*[Dd]ialogue*.ass"), None
+        )
+    else:
+        dialogue_path = args.dialogue
+
     dialogue_events = (
-        load_dialogue_file(Path(args.dialogue))
-        if (args.dialogue and Path(args.dialogue).exists())
+        load_dialogue_file(Path(dialogue_path))
+        if (dialogue_path and Path(dialogue_path).exists())
         else None
     )
 
